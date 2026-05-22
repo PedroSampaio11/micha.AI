@@ -1,5 +1,5 @@
 import { GoogleGenerativeAI } from '@google/generative-ai'
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { MODES, ModeId } from '@/lib/modes'
 
 const genai = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '')
@@ -13,12 +13,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (!imageBase64 || !modeId) {
-      return NextResponse.json({ error: 'Imagem e modo são obrigatórios.' }, { status: 400 })
+      return new Response(JSON.stringify({ error: 'Imagem e modo são obrigatórios.' }), { status: 400 })
     }
 
     const mode = MODES.find(m => m.id === modeId)
     if (!mode) {
-      return NextResponse.json({ error: 'Modo inválido.' }, { status: 400 })
+      return new Response(JSON.stringify({ error: 'Modo inválido.' }), { status: 400 })
     }
 
     const model = genai.getGenerativeModel({
@@ -26,23 +26,39 @@ export async function POST(req: NextRequest) {
       systemInstruction: mode.systemPrompt,
     })
 
-    const result = await model.generateContent([
+    const streamResult = await model.generateContentStream([
       {
         inlineData: {
           data: imageBase64,
-          mimeType: (mimeType ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp' | 'image/gif',
+          mimeType: (mimeType ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp',
         },
       },
       'Analise esta imagem e execute sua função conforme as instruções.',
     ])
 
-    const text = result.response.text()
-    return NextResponse.json({ result: text })
-  } catch (error) {
-    console.error('Analyze error:', error)
-    return NextResponse.json(
-      { error: 'Erro ao processar a imagem. Tente novamente.' },
-      { status: 500 }
-    )
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          for await (const chunk of streamResult.stream) {
+            const text = chunk.text()
+            if (text) controller.enqueue(encoder.encode(text))
+          }
+        } finally {
+          controller.close()
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Cache-Control': 'no-cache',
+        'X-Accel-Buffering': 'no',
+      },
+    })
+  } catch (err) {
+    console.error(err)
+    return new Response(JSON.stringify({ error: 'Erro ao processar. Tente novamente.' }), { status: 500 })
   }
 }

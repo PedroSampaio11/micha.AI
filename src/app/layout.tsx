@@ -2,11 +2,11 @@ import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = Inter({ subsets: ['latin'], display: 'swap' })
 
 export const metadata: Metadata = {
-  title: 'Promptadores — Arquitetura',
-  description: 'Análise de materiais e geração de prompts para renders de arquitetura',
+  title: 'Promptadores',
+  description: 'Análise de imagens e geração de prompts para arquitetura de interiores',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
