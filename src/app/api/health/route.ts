@@ -8,7 +8,7 @@ export async function GET() {
 
   try {
     const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({ model: 'gemini-1.5-flash' })
+    const model = genai.getGenerativeModel({ model: 'gemini-2.0-flash' })
     const result = await model.generateContent('Responda apenas: ok')
     const text = result.response.text()
     return Response.json({ ok: true, response: text, keyPrefix: apiKey.slice(0, 8) + '...' })
