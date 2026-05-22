@@ -2,9 +2,13 @@ import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest } from 'next/server'
 import { MODES, ModeId } from '@/lib/modes'
 
-const genai = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY ?? '')
-
 export async function POST(req: NextRequest) {
+  const apiKey = process.env.GOOGLE_AI_API_KEY
+  if (!apiKey) {
+    console.error('[analyze] GOOGLE_AI_API_KEY não configurada')
+    return new Response(JSON.stringify({ error: 'Serviço não configurado.' }), { status: 503 })
+  }
+
   try {
     const { imageBase64, mimeType, modeId } = await req.json() as {
       imageBase64: string
@@ -21,6 +25,7 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: 'Modo inválido.' }), { status: 400 })
     }
 
+    const genai = new GoogleGenerativeAI(apiKey)
     const model = genai.getGenerativeModel({
       model: 'gemini-1.5-flash',
       systemInstruction: mode.systemPrompt,
@@ -58,7 +63,8 @@ export async function POST(req: NextRequest) {
       },
     })
   } catch (err) {
-    console.error(err)
+    const msg = err instanceof Error ? err.message : String(err)
+    console.error('[analyze] erro:', msg)
     return new Response(JSON.stringify({ error: 'Erro ao processar. Tente novamente.' }), { status: 500 })
   }
 }
