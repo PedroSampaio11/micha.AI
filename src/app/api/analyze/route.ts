@@ -1,6 +1,8 @@
-import { GoogleGenerativeAI } from '@google/generative-ai'
 import { NextRequest } from 'next/server'
 import { MODES, ModeId } from '@/lib/modes'
+
+const GEMINI_URL = (apiKey: string) =>
+  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GOOGLE_AI_API_KEY
@@ -25,29 +27,61 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: 'Modo inválido.' }), { status: 400 })
     }
 
-    const genai = new GoogleGenerativeAI(apiKey)
-    const model = genai.getGenerativeModel({
-      model: 'gemini-2.0-flash',
-      systemInstruction: mode.systemPrompt,
+    const geminiRes = await fetch(GEMINI_URL(apiKey), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system_instruction: {
+          parts: [{ text: mode.systemPrompt }],
+        },
+        contents: [{
+          parts: [
+            {
+              inline_data: {
+                mime_type: mimeType ?? 'image/jpeg',
+                data: imageBase64,
+              },
+            },
+            { text: 'Analise esta imagem e execute sua função conforme as instruções.' },
+          ],
+        }],
+        generationConfig: {
+          temperature: 0.4,
+          maxOutputTokens: 8192,
+        },
+      }),
     })
 
-    const streamResult = await model.generateContentStream([
-      {
-        inlineData: {
-          data: imageBase64,
-          mimeType: (mimeType ?? 'image/jpeg') as 'image/jpeg' | 'image/png' | 'image/webp',
-        },
-      },
-      'Analise esta imagem e execute sua função conforme as instruções.',
-    ])
+    if (!geminiRes.ok || !geminiRes.body) {
+      const errText = await geminiRes.text()
+      console.error('[analyze] gemini error:', errText)
+      return new Response(JSON.stringify({ error: errText }), { status: geminiRes.status })
+    }
 
+    // Gemini SSE: each line is "data: {json}" — extract text and forward as plain stream
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
+        const reader = geminiRes.body!.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
         try {
-          for await (const chunk of streamResult.stream) {
-            const text = chunk.text()
-            if (text) controller.enqueue(encoder.encode(text))
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue
+              const json = line.slice(6).trim()
+              if (!json || json === '[DONE]') continue
+              try {
+                const parsed = JSON.parse(json)
+                const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text
+                if (text) controller.enqueue(encoder.encode(text))
+              } catch { /* skip malformed chunk */ }
+            }
           }
         } finally {
           controller.close()
