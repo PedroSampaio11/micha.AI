@@ -1,8 +1,10 @@
 import { NextRequest } from 'next/server'
 import { MODES, ModeId } from '@/lib/modes'
 
+export const maxDuration = 60
+
 const GEMINI_URL = (apiKey: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?key=${apiKey}&alt=sse`
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GOOGLE_AI_API_KEY
@@ -46,7 +48,7 @@ export async function POST(req: NextRequest) {
           ],
         }],
         generationConfig: {
-          temperature: 0.4,
+          temperature: 0.3,
           maxOutputTokens: 8192,
         },
       }),
@@ -58,16 +60,15 @@ export async function POST(req: NextRequest) {
       return new Response(JSON.stringify({ error: errText }), { status: geminiRes.status })
     }
 
-    // Gemini SSE: each line is "data: {json}" — extract text and forward as plain stream
     const encoder = new TextEncoder()
     const stream = new ReadableStream({
       async start(controller) {
         const reader = geminiRes.body!.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+
         const flush = (raw: string) => {
-          const lines = raw.split('\n')
-          for (const line of lines) {
+          for (const line of raw.split('\n')) {
             if (!line.startsWith('data: ')) continue
             const json = line.slice(6).trim()
             if (!json || json === '[DONE]') continue
@@ -78,6 +79,7 @@ export async function POST(req: NextRequest) {
             } catch { /* skip malformed chunk */ }
           }
         }
+
         try {
           while (true) {
             const { done, value } = await reader.read()
