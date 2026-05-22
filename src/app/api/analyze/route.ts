@@ -65,23 +65,31 @@ export async function POST(req: NextRequest) {
         const reader = geminiRes.body!.getReader()
         const decoder = new TextDecoder()
         let buffer = ''
+        const flush = (raw: string) => {
+          const lines = raw.split('\n')
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue
+            const json = line.slice(6).trim()
+            if (!json || json === '[DONE]') continue
+            try {
+              const parsed = JSON.parse(json)
+              const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text
+              if (text) controller.enqueue(encoder.encode(text))
+            } catch { /* skip malformed chunk */ }
+          }
+        }
         try {
           while (true) {
             const { done, value } = await reader.read()
-            if (done) break
-            buffer += decoder.decode(value, { stream: true })
-            const lines = buffer.split('\n')
-            buffer = lines.pop() ?? ''
-            for (const line of lines) {
-              if (!line.startsWith('data: ')) continue
-              const json = line.slice(6).trim()
-              if (!json || json === '[DONE]') continue
-              try {
-                const parsed = JSON.parse(json)
-                const text = parsed?.candidates?.[0]?.content?.parts?.[0]?.text
-                if (text) controller.enqueue(encoder.encode(text))
-              } catch { /* skip malformed chunk */ }
+            if (done) {
+              if (buffer) flush(buffer)
+              break
             }
+            buffer += decoder.decode(value, { stream: true })
+            const cut = buffer.lastIndexOf('\n')
+            if (cut === -1) continue
+            flush(buffer.slice(0, cut + 1))
+            buffer = buffer.slice(cut + 1)
           }
         } finally {
           controller.close()
