@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server'
 import { MODES, ModeId } from '@/lib/modes'
 
 const GEMINI_URL = (apiKey: string) =>
-  `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
+  `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent?key=${apiKey}&alt=sse`
 
 export async function POST(req: NextRequest) {
   const apiKey = process.env.GOOGLE_AI_API_KEY

@@ -5,24 +5,25 @@ export async function GET() {
   }
 
   try {
-    // List all available models for this API key
     const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}&pageSize=50`
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: 'Responda apenas: ok' }] }],
+        }),
+      }
     )
     const data = await res.json() as {
-      models?: { name: string; supportedGenerationMethods?: string[] }[]
+      candidates?: { content: { parts: { text: string }[] } }[]
       error?: { message: string }
     }
-
     if (!res.ok) {
-      return Response.json({ ok: false, error: data?.error?.message ?? JSON.stringify(data) }, { status: 500 })
+      return Response.json({ ok: false, status: res.status, error: data?.error?.message ?? JSON.stringify(data) }, { status: 500 })
     }
-
-    const models = (data.models ?? [])
-      .filter(m => m.supportedGenerationMethods?.includes('generateContent'))
-      .map(m => m.name)
-
-    return Response.json({ ok: true, keyPrefix: apiKey.slice(0, 8) + '...', availableModels: models })
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+    return Response.json({ ok: true, model: 'gemini-2.5-flash (v1beta)', response: text, keyPrefix: apiKey.slice(0, 8) + '...' })
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     return Response.json({ ok: false, error: msg }, { status: 500 })
