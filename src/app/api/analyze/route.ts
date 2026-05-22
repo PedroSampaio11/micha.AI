@@ -65,6 +65,6 @@ export async function POST(req: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
     console.error('[analyze] erro:', msg)
-    return new Response(JSON.stringify({ error: 'Erro ao processar. Tente novamente.' }), { status: 500 })
+    return new Response(JSON.stringify({ error: msg }), { status: 500 })
   }
 }
